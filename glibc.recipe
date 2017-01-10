@@ -1,0 +1,119 @@
+# Build recipe for glibc.
+#
+# Copyright (C) 2017 Egor Mikhailov, xeneloid@yandex.ru.
+#
+# This recipe is free software: you have unlimited permission
+# to copy, distribute and modify it.
+
+program=glibc
+version=2.24
+release=1
+
+tarname=${program}-${version}.tar.xz
+
+# Remote source(s)
+fetch=http://ftp.gnu.org/gnu/${program}/$tarname
+
+description="
+This package contains the GNU C libraries and header files. The GNU C library was written originally by Roland McGrath, and is currently maintained by Ulrich Drepper. Some parts of the library were contributed or worked on by other people. You'll need this package to compile programs.
+"
+
+homepage=http://www.gnu.org/software/libc/
+license=GPL
+
+build()
+{
+    unpack "${tardir}/$tarname"
+
+    cd "$srcdir/"
+
+	mkdir -v build
+	CPPFLAGS=${CPPFLAGS/-D_FORTIFY_SOURCE=2/}
+	CFLAGS=${CFLAGS/-fstack-protector-strong/}
+	LDFLAGS=${LDFLAGS/,-z,now/}
+	cd build
+	../configure --prefix=/usr          \
+	             --libexecdir=/usr/lib \
+	             --with-headers=/usr/include \
+	             --enable-kernel=2.6.32 \
+	             --enable-bind-now \
+	             --enable-add-ons \
+	             --enable-static-nss \
+	             --disable-profile \
+	             --disable-werror \
+	             --without-gd \
+	             --without-selinux \
+	             --without-cvs \
+	             --enable-multi-arch \
+	             --enable-obsolete-rpc
+	make
+	install -dm755 "${destdir}"/etc
+	touch "${destdir}"/etc/ld.so.conf
+	make install_root="${destdir}" install
+	cp -v ../nscd/nscd.conf "${destdir}"/etc/nscd.conf
+	mkdir -pv "${destdir}"/var/cache/nscd
+	mkdir -pv "${destdir}"/usr/lib/locale
+cat > "${destdir}"/etc/nsswitch.conf << "EOF"
+# Begin /etc/nsswitch.conf
+
+passwd: files
+group: files
+shadow: files
+
+hosts: files dns
+networks: files
+
+protocols: files
+services: files
+ethers: files
+rpc: files
+
+# End /etc/nsswitch.conf
+EOF
+cat > "${destdir}"/etc/ld.so.conf << "EOF"
+/usr/local/lib
+/opt/lib
+include /etc/ld.so.conf.d/*.conf
+EOF
+cat > "${destdir}"/etc/host.conf<< "EOF"
+#
+# /etc/host.conf: resolver configuration file
+#
+
+order hosts,bind
+multi on
+
+# End of file
+EOF
+cat > "${destdir}"/etc/hosts<< "EOF"
+#
+# /etc/hosts: static lookup table for host names
+#
+
+# IPv4
+127.0.0.1	localhost
+#<ip-address>	<hostname.domain.org>	<aliases>
+
+# IPv6
+#::1		ip6-localhost	ip6-loopback
+#fe00::0	ip6-localnet
+#ff00::0	ip6-mcastprefix
+#ff02::1	ip6-allnodes
+#ff02::2	ip6-allrouters
+#ff02::3	ip6-allhosts
+
+# End of file
+EOF
+cat > "${destdir}"/etc/resolv.conf<< "EOF"
+#
+# /etc/resolv.conf: resolver configuration file
+#
+
+#search <domain.org>
+#nameserver <ip-address>
+
+# End of file
+EOF
+	mkdir -pv "${destdir}"/etc/ld.so.conf.d
+
+}
